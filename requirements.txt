@@ -1,0 +1,5 @@
+boto3==1.38.16
+ipython==8.36.0
+obsws-python==1.7.2
+opencv-python==4.11.0.86
+requests==2.32.3

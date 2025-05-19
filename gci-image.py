@@ -125,7 +125,7 @@ def search_for_card(year=None, card_name='', card_number='', variant_name='', ve
         if variant_enabled_match:
             logger.debug(f'found variant enabled operator: {variant_enabled_match.groupdict()}')
             variant_name = variant_enabled_match.group('value').strip()
-            card_name = variant_operator_re.sub('', card_name)
+            card_name = variant_enabled_re.sub('', card_name)
         elif variant_disabled_match:
             logger.debug(f'found variant disabled operator: {variant_disabled_match.groupdict()}')
             variant_name = ''
@@ -169,7 +169,7 @@ def search_for_card(year=None, card_name='', card_number='', variant_name='', ve
     time.sleep(1)
 
     if cards:
-        card = cards[-1]
+        card = cards[0]
         sell_price = float(card['Sell'])
         psa10_price = float(card['PSA_10'])
         if sell_price < 1.00 and psa10_price < 15.00:

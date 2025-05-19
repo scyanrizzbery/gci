@@ -111,8 +111,13 @@ def get_card_info(card_name, year, card_num, trading_card=False, variant_name=''
 
     if filtered_results:
         subprocess.Popen(['open', filtered_results[0]['URL']], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
         with open('card-log.csv', 'a+') as fh:
             csv_writer = csv.DictWriter(fh, fieldnames=('Name', 'Set', 'Buy', 'Sell', 'PSA_9', 'PSA_10', 'URL'))
+
+            if not fh.tell():
+                csv_writer.writeheader()
+
             csv_writer.writerow(filtered_results[0])
 
     return filtered_results

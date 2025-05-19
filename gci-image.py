@@ -190,3 +190,5 @@ def search_for_card(year=None, card_name='', card_number='', variant_name='', ve
 def lookup(year, name='', number='', variant=''):
     cards = search_for_card(year=year, card_name=name, card_number=number, variant_name=variant)
     print(json.dumps(cards, indent=2))
+
+l = lookup

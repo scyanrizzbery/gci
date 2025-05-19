@@ -28,7 +28,7 @@ obs_client = obs.ReqClient(host='localhost', port=4455, password=OBS_PASSWORD, t
 rek_client = boto3.client('rekognition')
 
 logger = logging.getLogger('gci')
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 
 def capture_card(device=4):
@@ -109,7 +109,7 @@ def search_for_card(year=None, card_name='', card_number='', variant_name='', ve
 
     variant_operator_re = re.compile(r'\s(?P<operation>v|nv)=(?P<value>[^=]+)')
     year_operator_re = re.compile(r'\sy=(?P<value>\d{2,4})')
-    number_operator_re = re.compile(r'\s=(?P<value>[\w-]+)')
+    number_operator_re = re.compile(r'\s=(?P<value>[^\s]+)')
 
     if new_card_name:
         if new_card_name.startswith('+'):

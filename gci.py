@@ -31,11 +31,6 @@ def requests_retry_session(retries=3, backoff_factor=0.3, status_forcelist=(404,
     return session
 
 
-def sanitize_query_string(s):
-    """Strip regex-special characters for query use (not regex match)."""
-    return re.sub(r'[\[\]\(\)\{\}\.\*\+\?\^\$\|\\]', '', s).lower()
-
-
 def get_card_info(card_name, year, card_num, trading_card=False, variant_name='', verbose=False):
     api_key = os.getenv('SPORTS_CARDS_PRO_API_KEY')
 
@@ -47,16 +42,13 @@ def get_card_info(card_name, year, card_num, trading_card=False, variant_name=''
         print("Usage: get_card_info <card_name> [year] [card_number] [--variant-name] [--trading-card]", file=sys.stderr)
         return 1
 
-    # Cleaned version used for API query string
-    clean_pattern_text = sanitize_query_string(card_num) if card_num else ''
-
     year = str(year).strip() or ''
 
     if not year.isdigit():
         print("Usage: get_card_info <card_name> [year] [card_number] [--variant-name] [--trading-card]", file=sys.stderr)
         return 1
 
-    query = f"{card_name} {year} {clean_pattern_text}".strip()
+    query = f"{card_name} {year} {card_num}".strip()
 
     domain = "https://www.pricecharting.com" if trading_card else "https://www.sportscardspro.com"
     api_url = f"{domain}/api/products"

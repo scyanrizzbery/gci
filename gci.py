@@ -101,10 +101,11 @@ def get_card_info(card_name, year, card_num, trading_card=False, variant_name=''
                 print(f"skipping due to lack of number match: got {card_num} not in {name}", file=sys.stderr)
             continue
 
-        if variant_name.strip() and variant_name not in name:
-            if verbose:
-                print(f'skipping variant: {name} due to defined variant: {variant_name}')
-            continue
+        if '[' in name: # it's a variant e.g. [Refractor]
+            if not variant_name.strip() or variant_name.strip() not in name:
+                if verbose:
+                    print(f'skipping variant: {name} due to defined variant: {variant_name}')
+                continue
 
         filtered_results.append(product)
 

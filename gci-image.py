@@ -28,7 +28,7 @@ obs_client = obs.ReqClient(host='localhost', port=4455, password=OBS_PASSWORD, t
 rek_client = boto3.client('rekognition')
 
 logger = logging.getLogger('gci')
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 
 def capture_card(device=4):
@@ -83,7 +83,7 @@ def detect_back_number():
     return None
     
 
-def search_for_card(year=None, card_name='', card_number='', variant_name='', verbose=True):
+def search_for_card(year=None, card_name='', card_number='', variant_name='', verbose=False):
     scene = obs_client.get_current_program_scene()
     if scene.scene_name == OBS_GREEN_SCREEN_SCENE_NAME:
         for itemId in OBS_ITEMS_TO_SUSPEND:
@@ -108,9 +108,10 @@ def search_for_card(year=None, card_name='', card_number='', variant_name='', ve
         obs_client.set_scene_item_enabled(OBS_CAMERA_SOURCE_NAME, itemId, True)
 
     variant_enabled_re = re.compile(r'\sv=(?P<value>[^=]*)')
-    variant_disabled_re = re.compile(r'\snv=(?P<value>[^=]*)')
+    variant_disabled_re = re.compile(r'\snv=')
     year_operator_re = re.compile(r'\sy=(?P<value>\d{2,4})')
     number_operator_re = re.compile(r'\s=(?P<value>[^\s]+)')
+    verbose_operator_re = re.compile(r'\sV=')
 
     if new_card_name:
         if new_card_name.startswith('+'):
@@ -119,10 +120,14 @@ def search_for_card(year=None, card_name='', card_number='', variant_name='', ve
            card_name = new_card_name
 
         variant_enabled_match = variant_enabled_re.search(new_card_name)
+        variant_disabled_match = variant_disabled_re.search(new_card_name)
+
         if variant_enabled_match:
+            logger.debug(f'found variant enabled operator: {variant_enabled_match.groupdict()}')
             variant_name = variant_enabled_match.group('value').strip()
             card_name = variant_operator_re.sub('', card_name)
-        elif variant_disabled_re.search(new_card_name):
+        elif variant_disabled_match:
+            logger.debug(f'found variant disabled operator: {variant_disabled_match.groupdict()}')
             variant_name = ''
             card_name = variant_disabled_re.sub('', card_name)
 
@@ -143,6 +148,12 @@ def search_for_card(year=None, card_name='', card_number='', variant_name='', ve
             logger.debug(f'found number: {number_match.groupdict()}')
             card_number = number_match.group('value')
             card_name = number_operator_re.sub('', card_name)
+
+        verbose_match = verbose_operator_re.search(new_card_name)
+        if verbose_match:
+            logger.debug(f'found verbose: {verbose_match.groupdict()}')
+            verbose = True
+            card_name = verbose_operator_re.sub('', card_name)
 
     if not card_number:
         card_number = detect_back_number()

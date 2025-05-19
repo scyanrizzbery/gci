@@ -98,7 +98,7 @@ def get_card_info(card_name, year, card_num, trading_card=False, variant_name=''
 
         if card_num and card_num.strip().lower() not in name:
             if verbose:
-                print(f"skipping due to lack of number match: got {clean_pattern_text} not in {name}", file=sys.stderr)
+                print(f"skipping due to lack of number match: got {card_num} not in {name}", file=sys.stderr)
             continue
 
         if variant_name.strip() and variant_name not in name:

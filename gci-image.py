@@ -1,3 +1,4 @@
+import datetime
 import json
 import logging
 import os
@@ -16,6 +17,11 @@ from urllib3.util.retry import Retry
 
 
 OBS_PASSWORD = os.getenv('OBS_WS_PASSWORD')
+OBS_GREEN_SCREEN_SCENE_NAME = os.getenv('OBS_GREEN_SCREEN_SCENE_NAME', 'Green Screen')
+OBS_ITEMS_TO_SUSPEND = map(int, os.getenv('OBS_ITEMS_TO_SUSPEND', '1,9').split(','))
+OBS_FTL_ITEM_ID = int(os.getenv('OBS_FTL_ITEM_ID', '8'))
+OBS_FTW_ITEM_ID = int(os.getenv('OBS_FTW_ITEM_ID', '5'))
+OBS_CAMERA_SOURCE_NAME = os.getenv('OBS_CAMERA_SOURCE_NAME', 'Razer')
 
 obs_client = obs.ReqClient(host='localhost', port=4455, password=OBS_PASSWORD, timeout=3)
 
@@ -77,13 +83,13 @@ def detect_back_number():
     return None
     
 
-def search_for_card(year=None, card_name='', card_number='', include_variants=False, verbose=True):
+def search_for_card(year=None, card_name='', card_number='', variant_name='', verbose=True):
     scene = obs_client.get_current_program_scene()
-    if scene.scene_name == 'Green Screen':
-        obs_client.set_scene_item_enabled('Green Screen', 1, False)
-        obs_client.set_scene_item_enabled('Green Screen', 9, False)
+    if scene.scene_name == OBS_GREEN_SCREEN_SCENE_NAME:
+        for itemId in OBS_ITEMS_TO_SUSPEND:
+            obs_client.set_scene_item_enabled(OBS_GREEN_SCREEN_SCENE_NAME, itemId, False)
 
-    obs_client.set_source_filter_enabled('Razer', 'Chroma Key', False)
+    obs_client.set_source_filter_enabled(OBS_CAMERA_SOURCE_NAME, 'Chroma Key', False)
 
     time.sleep(0.2)
 
@@ -96,8 +102,14 @@ def search_for_card(year=None, card_name='', card_number='', include_variants=Fa
 
     obs_client.trigger_hot_key_by_name('OBSBasic.Screenshot')
 
-    obs_client.set_source_filter_enabled('Razer', 'Chroma Key', True)
-    obs_client.set_scene_item_enabled('Green Screen', 9, True)
+    obs_client.set_source_filter_enabled(OBS_CAMERA_SOURCE_NAME, 'Chroma Key', True)
+
+    for itemId in OBS_ITEMS_TO_SUSPEND:
+        obs_client.set_scene_item_enabled(OBS_CAMERA_SOURCE_NAME, itemId, True)
+
+    variant_operator_re = re.compile(r'\s(?P<operation>v|nv)=(?P<value>[^=]+)')
+    year_operator_re = re.compile(r'\sy=(?P<value>\d{2,4})')
+    number_operator_re = re.compile(r'\s=(?P<value>[\w-]+)')
 
     if new_card_name:
         if new_card_name.startswith('+'):
@@ -105,29 +117,40 @@ def search_for_card(year=None, card_name='', card_number='', include_variants=Fa
         else:
            card_name = new_card_name
 
-        if '=v' in card_name:
-            include_variants = True
-            card_name = card_name.replace('=v', '')
-        if 'y=' in card_name:
-            index = card_name.index('y=') + 2
-            year = card_name[index:index+4]
-            card_name = card_name.replace('y=' + year, '')
-        if '=nv' in card_name:
-            include_variants = False
-            card_name = card_name.replace('=nv', '')
-        if '=' in card_name:
-            card_number = card_name[card_name.index('=') + 1:]
-            card_name = card_name.replace('=' + card_number, '')
+        variant_match = variant_operator_re.search(new_card_name)
+        if variant_match:
+            logger.debug(f'found variant operator: {variant_match.groupdict()}')
+            variant_name = variant_match.group('value').strip()
+            card_name = variant_operator_re.sub('', card_name)
+
+        year_match = year_operator_re.search(new_card_name)
+        if year_match:
+            logger.debug(f'found year: {year_match.groupdict()}')
+            today = datetime.date.today()
+            year = int(year_match.group('value'))
+            if year < 100:
+                if 0 < year < today.year - 2000:
+                    year = 1900 + year
+                else:
+                    year = 2000 + today.year
+            card_name = year_operator_re.sub('', card_name)
+
+        number_match = number_operator_re.search(new_card_name)
+        if number_match:
+            logger.debug(f'found number: {number_match.groupdict()}')
+            card_number = number_match.group('value')
+            card_name = number_operator_re.sub('', card_name)
 
     if not card_number:
         card_number = detect_back_number()
 
-    obs_client.set_scene_item_enabled('Green Screen', 1, True)
+    for itemId in OBS_ITEMS_TO_SUSPEND:
+        obs_client.set_scene_item_enabled(OBS_GREEN_SCREEN_SCENE_NAME, itemId, True)
 
     if not card_number or not card_number.isdigit() or int(card_number) > 1900:
         card_number = input(f'Manually set card #? 📷🔥 [{card_number}]: ') or card_number
 
-    cards = gci.get_card_info(card_name, year, card_number, include_variants=include_variants, verbose=verbose)
+    cards = gci.get_card_info(card_name, year, card_number, variant_name=variant_name, verbose=verbose)
 
     time.sleep(1)
 
@@ -137,20 +160,19 @@ def search_for_card(year=None, card_name='', card_number='', include_variants=Fa
         psa10_price = float(card['PSA_10'])
         if sell_price < 1.00 and psa10_price < 15.00:
             logger.info('playing FTL')
-            obs_client.set_scene_item_enabled('Green Screen', 8, True)
+            obs_client.set_scene_item_enabled(OBS_GREEN_SCREEN_SCENE_NAME, OBS_FTL_ITEM_ID, True)
             time.sleep(3)
         elif sell_price > 5.00 and psa10_price > 30.00:
             logger.info('playing FTW')
-            obs_client.set_scene_item_enabled('Green Screen', 5, True)
+            obs_client.set_scene_item_enabled(OBS_GREEN_SCREEN_SCENE_NAME, OBS_FTW_ITEM_ID, True)
             time.sleep(2)
 
-
-    obs_client.set_scene_item_enabled('Green Screen', 8, False)
-    obs_client.set_scene_item_enabled('Green Screen', 5, False)
+    obs_client.set_scene_item_enabled(OBS_GREEN_SCREEN_SCENE_NAME, OBS_FTL_ITEM_ID, False)
+    obs_client.set_scene_item_enabled(OBS_GREEN_SCREEN_SCENE_NAME, OBS_FTW_ITEM_ID, False)
 
     return cards
 
 
-def lookup(year, name='', number='', variants=True):
-    cards = search_for_card(year=year, card_name=name, card_number=number, include_variants=variants)
+def lookup(year, name='', number='', variant=''):
+    cards = search_for_card(year=year, card_name=name, card_number=number, variant_name=variant)
     print(json.dumps(cards, indent=2))

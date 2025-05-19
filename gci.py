@@ -36,7 +36,7 @@ def sanitize_query_string(s):
     return re.sub(r'[\[\]\(\)\{\}\.\*\+\?\^\$\|\\]', '', s).lower()
 
 
-def get_card_info(card_name, year, card_num, trading_card=False, include_variants=False, verbose=False):
+def get_card_info(card_name, year, card_num, trading_card=False, variant_name='', verbose=False):
     api_key = os.getenv('SPORTS_CARDS_PRO_API_KEY')
 
     if not api_key:
@@ -44,7 +44,7 @@ def get_card_info(card_name, year, card_num, trading_card=False, include_variant
         return 1
 
     if not card_name:
-        print("Usage: get_card_info <card_name> [year] [card_number] [--include-variants] [--trading-card]", file=sys.stderr)
+        print("Usage: get_card_info <card_name> [year] [card_number] [--variant-name] [--trading-card]", file=sys.stderr)
         return 1
 
     # Cleaned version used for API query string
@@ -52,10 +52,9 @@ def get_card_info(card_name, year, card_num, trading_card=False, include_variant
 
     year = str(year).strip() or ''
 
-    if not year.isdigit() or int(year) < 1900:
-        print("Usage: get_card_info <card_name> [year] [card_number] [--include-variants] [--trading-card]", file=sys.stderr)
+    if not year.isdigit():
+        print("Usage: get_card_info <card_name> [year] [card_number] [--variant-name] [--trading-card]", file=sys.stderr)
         return 1
-
 
     query = f"{card_name} {year} {clean_pattern_text}".strip()
 
@@ -110,9 +109,9 @@ def get_card_info(card_name, year, card_num, trading_card=False, include_variant
                 print(f"skipping due to lack of number match: got {clean_pattern_text} not in {name}", file=sys.stderr)
             continue
 
-        if not include_variants and '[' in name:
+        if variant_name.strip() and variant_name not in name:
             if verbose:
-                print(f'skipping variant: {name}')
+                print(f'skipping variant: {name} due to defined variant: {variant_name}')
             continue
 
         filtered_results.append(product)
@@ -141,16 +140,16 @@ def main():
     parser.add_argument("card_num", type=str, help="Regex pattern for the card number")
     parser.add_argument("-y", default=datetime.datetime.today().year - 1, help="The year of the card")
     parser.add_argument("-t", "--trading-card", action="store_true", help="Trading card game such as Magic The Gathering (c)")
-    parser.add_argument("-i", "--include-variants", action="store_true", help="Include variants")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Verbose")
+    parser.add_argument("-v", "--variant", type=str, help="Include variants")
+    parser.add_argument("-V", "--verbose", action="store_true", help="Verbose")
 
     args = parser.parse_args()
     results = get_card_info(
         card_name=args.card_name,
         year=args.y,
-        card_num_pattern=args.card_num,
+        card_num=args.card_num,
         trading_card=args.trading_card,
-        include_variants=args.include_variants,
+        variant_name=args.variant,
         verbose=args.verbose
     )
     sys.exit(0 if results else 1)

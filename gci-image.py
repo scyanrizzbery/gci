@@ -107,7 +107,8 @@ def search_for_card(year=None, card_name='', card_number='', variant_name='', ve
     for itemId in OBS_ITEMS_TO_SUSPEND:
         obs_client.set_scene_item_enabled(OBS_CAMERA_SOURCE_NAME, itemId, True)
 
-    variant_operator_re = re.compile(r'\s(?P<operation>v|nv)=(?P<value>[^=]+)')
+    variant_enabled_re = re.compile(r'\sv=(?P<value>[^=]*)')
+    variant_disabled_re = re.compile(r'\snv=(?P<value>[^=]*)')
     year_operator_re = re.compile(r'\sy=(?P<value>\d{2,4})')
     number_operator_re = re.compile(r'\s=(?P<value>[^\s]+)')
 
@@ -117,11 +118,13 @@ def search_for_card(year=None, card_name='', card_number='', variant_name='', ve
         else:
            card_name = new_card_name
 
-        variant_match = variant_operator_re.search(new_card_name)
-        if variant_match:
-            logger.debug(f'found variant operator: {variant_match.groupdict()}')
-            variant_name = variant_match.group('value').strip()
+        variant_enabled_match = variant_enabled_re.search(new_card_name)
+        if variant_enabled_match:
+            variant_name = variant_enabled_match.group('value').strip()
             card_name = variant_operator_re.sub('', card_name)
+        elif variant_disabled_re.search(new_card_name):
+            variant_name = ''
+            card_name = variant_disabled_re.sub('', card_name)
 
         year_match = year_operator_re.search(new_card_name)
         if year_match:

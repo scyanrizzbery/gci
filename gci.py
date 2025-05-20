@@ -13,7 +13,28 @@ import time
 import requests
 
 from requests.adapters import HTTPAdapter
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+
 from urllib3.util.retry import Retry
+
+
+BROWSER_PATH = '/usr/bin/brave-browser'
+DRIVER_PATH = '/usr/local/bin/chromedriver'
+
+options = Options()
+options.binary_location = BROWSER_PATH
+selenium_driver = webdriver.Chrome(options=options)
+
+
+def cleanup(signal):
+    selenium_driver.quit()
+    sys.exit(1)
+
+
+signal.signal(signal.SIGTERM, cleanup)
+signal.signal(signal.SIGABRT, cleanup)
 
 
 def requests_retry_session(retries=3, backoff_factor=0.3, status_forcelist=(404,), session=None):
@@ -83,7 +104,7 @@ def get_card_info(card_name, year, card_num, trading_card=False, variant_name=''
         "PSA_9": "{:.02f}".format((product.get('graded-price') or 0) / 100),
         "PSA_10": "{:.02f}".format((product.get('manual-only-price') or 0) / 100),
         "URL": f"{product_url}{product.get('id')}",
-    } for product in reversed(raw_response.get('products', []))]
+    } for i, product in enumerate(raw_response.get('products', []), start=1)]
 
     filtered_results = []
 
@@ -109,8 +130,24 @@ def get_card_info(card_name, year, card_num, trading_card=False, variant_name=''
 
         filtered_results.append(product)
 
+    for i, product in enumerate(filtered_results, 1):
+        product['i'] = i
+
     if filtered_results:
-        subprocess.Popen(['open', filtered_results[0]['URL']], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if len(filtered_results) == 1:
+            result = filtered_results[0]
+        else:
+            for item in filtered_results:
+                print(f"{item['i']}). {item['Name']} - {item['Set']}")
+
+            index_choice = ''
+            while not index_choice or not index_choice.isdigit():
+                index_choice = input('Choice [1]: ') or '1'
+                if int(index_choice) not in range(len(filtered_results), 1):
+                    continue
+            result = filtered_results[int(index_choice) - 1]
+
+        selenium_driver.get(result['URL'])
 
         with open('card-log.csv', 'a+') as fh:
             csv_writer = csv.DictWriter(fh, fieldnames=('Name', 'Set', 'Buy', 'Sell', 'PSA_9', 'PSA_10', 'URL'))
@@ -118,7 +155,8 @@ def get_card_info(card_name, year, card_num, trading_card=False, variant_name=''
             if not fh.tell():
                 csv_writer.writeheader()
 
-            csv_writer.writerow(filtered_results[0])
+            result.pop('i')
+            csv_writer.writerow(result)
 
     return filtered_results
 
@@ -129,7 +167,7 @@ def main():
     parser = argparse.ArgumentParser(description="Fetch sports card data.")
     parser.add_argument("card_name", type=str, nargs="+", help="The name of the card to search for")
     parser.add_argument("card_num", type=str, help="Regex pattern for the card number")
-    parser.add_argument("-y", default=datetime.datetime.today().year - 1, help="The year of the card")
+    parser.add_argument("-y", "--year",  default=datetime.datetime.today().year - 1, help="The year of the card")
     parser.add_argument("-t", "--trading-card", action="store_true", help="Trading card game such as Magic The Gathering (c)")
     parser.add_argument("-v", "--variant", type=str, help="Include variants")
     parser.add_argument("-V", "--verbose", action="store_true", help="Verbose")

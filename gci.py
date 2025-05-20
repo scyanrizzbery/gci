@@ -3,6 +3,7 @@
 import argparse
 import csv
 import json
+import logging
 import os
 import re
 import signal
@@ -19,6 +20,8 @@ from selenium.webdriver.chrome.options import Options
 
 from urllib3.util.retry import Retry
 
+
+logger = logging.getLogger('gci')
 
 BROWSER_PATH = '/usr/bin/brave-browser'
 DRIVER_PATH = '/usr/local/bin/chromedriver'
@@ -56,17 +59,17 @@ def get_card_info(card_name, year, card_num, trading_card=False, variant_name=''
     api_key = os.getenv('SPORTS_CARDS_PRO_API_KEY')
 
     if not api_key:
-        print("❌ SPORTS_CARDS_PRO_API_KEY is not set.", file=sys.stderr)
+        logger.error("❌ SPORTS_CARDS_PRO_API_KEY is not set.")
         return 1
 
     if not card_name:
-        print("Usage: get_card_info <card_name> [year] [card_number] [--variant-name] [--trading-card]", file=sys.stderr)
+        logger.error("Usage: get_card_info <card_name> [year] [card_number] [--variant-name] [--trading-card]")
         return 1
 
     year = str(year).strip() or ''
 
     if not year.isdigit():
-        print("Usage: get_card_info <card_name> [year] [card_number] [--variant-name] [--trading-card]", file=sys.stderr)
+        logger.error("Usage: get_card_info <card_name> [year] [card_number] [--variant-name] [--trading-card]")
         return 1
 
     query = f"{card_name} {year} {card_num}".strip()
@@ -76,10 +79,10 @@ def get_card_info(card_name, year, card_num, trading_card=False, variant_name=''
     product_url = f"{domain}/game/"
 
     if verbose:
-        print(f"📡 Making request to: {api_url}", file=sys.stderr)
-        print(f"🔎 Query: q={query}", file=sys.stderr)
-        print(f"🔐 Using API key from $SPORTS_CARDS_PRO_API_KEY", file=sys.stderr)
-        print("----------------------------------------", file=sys.stderr)
+        logger.debug(f"📡 Making request to: {api_url}")
+        logger.debug(f"🔎 Query: q={query}")
+        logger.debug(f"🔐 Using API key from $SPORTS_CARDS_PRO_API_KEY")
+        logger.debug("----------------------------------------")
 
     headers = {'Content-Type': 'application/json'}
 
@@ -87,13 +90,13 @@ def get_card_info(card_name, year, card_num, trading_card=False, variant_name=''
         response = requests_retry_session().get(api_url, params=dict(t=api_key, q=query), headers=headers)
         response.raise_for_status()
     except requests.RequestException as e:
-        print(f"❌ HTTP request failed: {e}", file=sys.stderr)
+        logger.error(f"❌ HTTP request failed: {e}")
         return 1
 
     try:
         raw_response = response.json()
     except json.JSONDecodeError:
-        print("❌ Failed to parse JSON response.", file=sys.stderr)
+        logger.error("❌ Failed to parse JSON response.")
         return 1
 
     products = [{
@@ -114,18 +117,18 @@ def get_card_info(card_name, year, card_num, trading_card=False, variant_name=''
 
         if year and year not in console and year not in name:
             if verbose:
-                print(f"skipping due to lack of year match: got {year}, not in {console} {name}", file=sys.stderr)
+                logger.debug(f"skipping due to lack of year match: got {year}, not in {console} {name}")
             continue
 
         if card_num and card_num.strip().lower() not in name:
             if verbose:
-                print(f"skipping due to lack of number match: got {card_num} not in {name}", file=sys.stderr)
+                logger.debug(f"skipping due to lack of number match: got {card_num} not in {name}")
             continue
 
         if '[' in name: # it's a variant e.g. [Refractor]
             if not variant_name.strip() or variant_name.strip() not in name:
                 if verbose:
-                    print(f'skipping variant: {name} due to defined variant: {variant_name}')
+                    logger.debug(f'skipping variant: {name} due to defined variant: {variant_name}')
                 continue
 
         filtered_results.append(product)

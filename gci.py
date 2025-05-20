@@ -31,15 +31,6 @@ options.binary_location = BROWSER_PATH
 selenium_driver = webdriver.Chrome(options=options)
 
 
-def cleanup(signal):
-    selenium_driver.quit()
-    sys.exit(1)
-
-
-signal.signal(signal.SIGTERM, cleanup)
-signal.signal(signal.SIGABRT, cleanup)
-
-
 def requests_retry_session(retries=3, backoff_factor=0.3, status_forcelist=(404,), session=None):
     session = session or requests.Session()
     retry = Retry(

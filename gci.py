@@ -17,6 +17,7 @@ from requests.adapters import HTTPAdapter
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
+from selenium.common.exceptions import WebDriverException, InvalidSessionIdException
 
 from urllib3.util.retry import Retry
 
@@ -29,6 +30,17 @@ DRIVER_PATH = '/usr/local/bin/chromedriver'
 options = Options()
 options.binary_location = BROWSER_PATH
 selenium_driver = webdriver.Chrome(options=options)
+
+
+def browser_is_alive(driver):
+    try:
+        _ = driver.title
+        return True
+    except InvalidSessionIdException:
+        logger.error('Selenium session has ended or is invalid.')
+    except WebDriverException as e:
+        logger.error(f'Selenium WebDriver exception: {e}')
+    return False
 
 
 def requests_retry_session(retries=3, backoff_factor=0.3, status_forcelist=(404,), session=None):
@@ -141,7 +153,8 @@ def get_card_info(card_name, year, card_num, trading_card=False, variant_name=''
                     continue
             result = filtered_results[int(index_choice) - 1]
 
-        selenium_driver.get(result['URL'])
+        if browser_is_alive(selenium_driver):
+            selenium_driver.get(result['URL'])
 
         with open('card-log.csv', 'a+') as fh:
             csv_writer = csv.DictWriter(fh, fieldnames=('Name', 'Set', 'Buy', 'Sell', 'PSA_9', 'PSA_10', 'URL'))

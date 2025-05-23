@@ -27,12 +27,14 @@ obs_client = obs.ReqClient(host='localhost', port=4455, password=OBS_PASSWORD, t
 
 rek_client = boto3.client('rekognition')
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger('gci-image')
+logger = logging.getLogger(__name__)
 
 
 def capture_card(device=4):
     cap = cv2.VideoCapture(device)
+
+    obs_client.set_source_filter_enabled(OBS_CAMERA_SOURCE_NAME, 'Chroma Key', False)
+    time.sleep(0.5)
 
     ret, frame = cap.read()
 
@@ -40,6 +42,8 @@ def capture_card(device=4):
         return None
 
     cap.release()
+
+    obs_client.set_source_filter_enabled(OBS_CAMERA_SOURCE_NAME, 'Chroma Key', True)
 
     success, buffer = cv2.imencode('.jpg', frame)
     if not success:
@@ -83,13 +87,11 @@ def detect_back_number():
     return None
     
 
-def search_for_card(year=None, card_name='', card_number='', variant_name='', verbose=False):
+def search_for_card(year='', card_name='', card_number='', variant_name='', trading_card=False, verbose=False):
     scene = obs_client.get_current_program_scene()
     if scene.scene_name == OBS_GREEN_SCREEN_SCENE_NAME:
         for itemId in OBS_ITEMS_TO_SUSPEND:
             obs_client.set_scene_item_enabled(OBS_GREEN_SCREEN_SCENE_NAME, itemId, False)
-
-    obs_client.set_source_filter_enabled(OBS_CAMERA_SOURCE_NAME, 'Chroma Key', False)
 
     time.sleep(0.2)
 
@@ -102,18 +104,20 @@ def search_for_card(year=None, card_name='', card_number='', variant_name='', ve
 
     obs_client.trigger_hot_key_by_name('OBSBasic.Screenshot')
 
-    obs_client.set_source_filter_enabled(OBS_CAMERA_SOURCE_NAME, 'Chroma Key', True)
-
-    for itemId in OBS_ITEMS_TO_SUSPEND:
-        obs_client.set_scene_item_enabled(OBS_CAMERA_SOURCE_NAME, itemId, True)
-
     variant_enabled_re = re.compile(r'v=(?P<value>[^=]*)')
     variant_disabled_re = re.compile(r'nv=')
     year_operator_re = re.compile(r'y=(?P<value>\d{2,4})')
     number_operator_re = re.compile(r'=(?P<value>[\w\d-]{1,})')
     verbose_operator_re = re.compile('V=')
+    trading_card_operator_re = re.compile('t=')
 
     if new_card_name:
+        trading_card_match = trading_card_operator_re.search(new_card_name)
+        if trading_card_match:
+            logger.info(f'found trading card operator: {trading_card_match.groupdict()}')
+            new_card_name = trading_card_operator_re.sub('', new_card_name)
+            trading_card = True
+
         if new_card_name.startswith('+'):
            card_name = card_name + ' ' + new_card_name[1:]
         elif new_card_name.startswith('='):  # starting a line with card_number signifies name was ok
@@ -157,16 +161,21 @@ def search_for_card(year=None, card_name='', card_number='', variant_name='', ve
             card_number = number_match.group('value')
             card_name = number_operator_re.sub('', card_name)
 
-    if not card_number:
-        card_number = detect_back_number()
+    if not trading_card:
+        if not card_number:
+            card_number = detect_back_number()
 
-    for itemId in OBS_ITEMS_TO_SUSPEND:
-        obs_client.set_scene_item_enabled(OBS_GREEN_SCREEN_SCENE_NAME, itemId, True)
+        if not card_number or not card_number.isdigit() or int(card_number) > 1900:
+            card_number = input(f'Manually set card #? 📷🔥 [{card_number}]: ') or card_number
 
-    if not card_number or not card_number.isdigit() or int(card_number) > 1900:
-        card_number = input(f'Manually set card #? 📷🔥 [{card_number}]: ') or card_number
-
-    cards = gci.get_card_info(card_name, year, card_number, variant_name=variant_name, verbose=verbose)
+    cards = gci.get_card_info(
+        card_name,
+        year,
+        card_number,
+        variant_name=variant_name,
+        trading_card=trading_card,
+        verbose=verbose
+    )
 
     time.sleep(1)
 
@@ -189,8 +198,15 @@ def search_for_card(year=None, card_name='', card_number='', variant_name='', ve
     return cards
 
 
-def lookup(year, name='', number='', variant=''):
-    cards = search_for_card(year=year, card_name=name, card_number=number, variant_name=variant)
-    print(json.dumps(cards, indent=2))
+def lookup(year='', name='', number='', variant='', trading_card=False, verbose=False):
+    cards = search_for_card(
+        year=str(year),
+        card_name=name,
+        card_number=str(number),
+        variant_name=variant,
+        trading_card=trading_card,
+        verbose=verbose
+    )
+    print(json.dumps(cards[:5], indent=2))
 
 l = lookup

@@ -22,7 +22,8 @@ from selenium.common.exceptions import WebDriverException, InvalidSessionIdExcep
 from urllib3.util.retry import Retry
 
 
-logger = logging.getLogger('gci')
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 BROWSER_PATH = '/usr/bin/brave-browser'
 DRIVER_PATH = '/usr/local/bin/chromedriver'
@@ -71,7 +72,7 @@ def get_card_info(card_name, year, card_num, trading_card=False, variant_name=''
 
     year = str(year).strip() or ''
 
-    if not year.isdigit():
+    if year and not year.isdigit():
         logger.error("Usage: get_card_info <card_name> [year] [card_number] [--variant-name] [--trading-card]")
         return 1
 
@@ -82,10 +83,10 @@ def get_card_info(card_name, year, card_num, trading_card=False, variant_name=''
     product_url = f"{domain}/game/"
 
     if verbose:
-        logger.debug(f"📡 Making request to: {api_url}")
-        logger.debug(f"🔎 Query: q={query}")
-        logger.debug(f"🔐 Using API key from $SPORTS_CARDS_PRO_API_KEY")
-        logger.debug("----------------------------------------")
+        logger.info(f"📡 Making request to: {api_url}")
+        logger.info(f"🔎 Query: q={query}")
+        logger.info(f"🔐 Using API key from $SPORTS_CARDS_PRO_API_KEY")
+        logger.info("----------------------------------------")
 
     headers = {'Content-Type': 'application/json'}
 
@@ -110,48 +111,62 @@ def get_card_info(card_name, year, card_num, trading_card=False, variant_name=''
         "PSA_9": "{:.02f}".format((product.get('graded-price') or 0) / 100),
         "PSA_10": "{:.02f}".format((product.get('manual-only-price') or 0) / 100),
         "URL": f"{product_url}{product.get('id')}",
-    } for i, product in enumerate(raw_response.get('products', []), start=1)]
+    } for product in raw_response.get('products', [])]
+
+    logger.info(f"📦 Found {len(products)} products matching query")
 
     filtered_results = []
 
-    for product in products:
-        console = product['Set'].lower()
-        name = product['Name'].lower()
+    if trading_card:
+        filtered_results = products
+    else:
+        for product in products:
+            console = product['Set'].lower()
+            name = product['Name'].lower()
 
-        if year and year not in console and year not in name:
-            if verbose:
-                logger.debug(f"skipping due to lack of year match: got {year}, not in {console} {name}")
-            continue
-
-        if card_num and card_num.strip().lower() not in name:
-            if verbose:
-                logger.debug(f"skipping due to lack of number match: got {card_num} not in {name}")
-            continue
-
-        if '[' in name: # it's a variant e.g. [Refractor]
-            if not variant_name.strip() or variant_name.strip() not in name:
+            if year and year not in console and year not in name:
                 if verbose:
-                    logger.debug(f'skipping variant: {name} due to defined variant: {variant_name}')
+                    logger.info(f"skipping due to lack of year match: got {year}, not in {console} {name}")
                 continue
 
-        filtered_results.append(product)
+            if card_num and card_num.strip().lower() not in name:
+                if verbose:
+                    logger.info(f"skipping due to lack of number match: got {card_num} not in {name}")
+                continue
+
+            if '[' in name: # it's a variant e.g. [Refractor]
+                if variant_name.strip() and variant_name.strip() not in name:
+                    if verbose:
+                        logger.info(f'skipping variant: {name} due to defined variant: {variant_name}')
+                    continue
+
+            filtered_results.append(product)
 
     for i, product in enumerate(filtered_results, 1):
-        product['i'] = i
+        product['Index'] = i
 
     if filtered_results:
         if len(filtered_results) == 1:
             result = filtered_results[0]
         else:
-            for item in filtered_results:
-                print(f"{item['i']}). {item['Name']} - {item['Set']}")
+            for item in filtered_results[:25]:
+                print(f"{item['Index']}). {item['Name']} - {item['Set']}")
 
             index_choice = ''
-            while not index_choice or not index_choice.isdigit():
+            while isinstance(index_choice, str):
                 index_choice = input('Choice [1]: ') or '1'
-                if int(index_choice) not in range(len(filtered_results), 1):
+                try:
+                    index_choice = int(index_choice)
+                except ValueError:
+                    logger.error(f"Invalid input: {index_choice}. Please enter a number.")
                     continue
-            result = filtered_results[int(index_choice) - 1]
+                index_choice = int(index_choice)
+                if index_choice < 0:
+                    break
+                if index_choice not in range(len(filtered_results), 1):
+                    continue
+            result = filtered_results[index_choice - 1]
+            filtered_results = [result]
 
         if browser_is_alive(selenium_driver):
             selenium_driver.get(result['URL'])
@@ -162,7 +177,7 @@ def get_card_info(card_name, year, card_num, trading_card=False, variant_name=''
             if not fh.tell():
                 csv_writer.writeheader()
 
-            result.pop('i')
+            result.pop('Index')
             csv_writer.writerow(result)
 
     return filtered_results
@@ -182,7 +197,7 @@ def main():
     args = parser.parse_args()
     results = get_card_info(
         card_name=args.card_name,
-        year=args.y,
+        year=args.year,
         card_num=args.card_num,
         trading_card=args.trading_card,
         variant_name=args.variant,
